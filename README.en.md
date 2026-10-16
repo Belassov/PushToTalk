@@ -2,10 +2,8 @@
 
 A tiny Windows app that turns a key on your keyboard into a **push-to-talk button for your
 microphone**. Hold the key — the mic is live. Release it — the mic is muted.
-Turn the feature off and the mic stays live all the time (no key needed), while the app keeps
-running quietly in the tray.
 
-Русское описание (main): [README.md](README.md)
+**РУССКОЕ** описание: [README.md](README.md)
 
 ![Push-to-Talk](screenshot_en.png)
 
@@ -98,8 +96,7 @@ or simply run `src/build.sh` (also builds `PushToTalk_selftest.exe`).
   *More info → Run anyway*.
 * If you kill the process from Task Manager while PTT is on and no key is held, the microphone
   can stay muted. Just start the app again — it always unmutes on start.
-* The app was developed and tested end-to-end under Wine 9 (self-test 16/16 + GUI, tray,
-  autostart and key handling checks). Issues and pull requests are welcome.
+* The application was developed and fully tested on Windows 10. Issues and pull requests are welcome.
 
 ## License
 
