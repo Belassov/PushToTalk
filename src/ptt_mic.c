@@ -1,17 +1,3 @@
-/* ============================================================================
- * ptt_mic.c — Push-to-Talk: микрофон как «рация» на глобальной клавише
- *
- *   * глобальный хук клавиатуры (WH_KEYBOARD_LL): нажал клавишу -> микрофон
- *     включён, отпустил -> заглушён. Можно выключить PTT: микрофон всегда живой.
- *   * трей (Shell_NotifyIcon), окно прячется в трей по «свернуть» и «закрыть»
- *   * автозапуск с Windows: HKCU\...\CurrentVersion\Run (без прав админа)
- *   * язык интерфейса RU / EN
- *   * конфиг: %APPDATA%\PushToTalk\config.ini, лог: %APPDATA%\PushToTalk\log.txt
- *
- * Заглушение делается через Core Audio API на устройство по умолчанию
- * (default communications device, как это видит Discord/Skype/игры).
- * ==========================================================================*/
-
 #define UNICODE
 #define _UNICODE
 #define WIN32_LEAN_AND_MEAN
@@ -32,12 +18,10 @@
 #define REGVALNAME L"PushToTalk"
 #define DIRNAME    L"PushToTalk"
 
-/* ---- GUID'ы описаны локально, чтобы не зависеть от libuuid --------------- */
 static const GUID G_CLSID_MMDeviceEnumerator  = {0xBCDE0395,0xE52F,0x467C,{0x8E,0x3D,0xC4,0x57,0x92,0x91,0x69,0x2E}};
 static const GUID G_IID_IMMDeviceEnumerator   = {0xA95664D2,0x9614,0x4F35,{0xA7,0x46,0xDE,0x8D,0xB6,0x36,0x17,0xE6}};
 static const GUID G_IID_IAudioEndpointVolume  = {0x5CDF2C82,0x841E,0x4546,{0x97,0x22,0x0C,0xF7,0x40,0x78,0x22,0x9A}};
 
-/* ============================ строки интерфейса ========================== */
 enum {
     STR_TITLE = 0, STR_KEY_FMT, STR_BTN_CHANGE, STR_BTN_CAPTURE, STR_HINT_KEY,
     STR_CHK_PTT, STR_CHK_BLOCK, STR_CHK_AUTOSTART, STR_BTN_EXIT,
@@ -100,7 +84,6 @@ static const wchar_t *S_EN[STR_COUNT] = {
     L"Minimizing and closing hide the window to the tray — the app stays running. Real exit: \"Exit\" or the tray menu.",
 };
 
-/* ================================ состояние ============================== */
 static HINSTANCE g_hInst;
 static HWND   g_hwnd;
 static HFONT  g_font, g_fontSmall;
@@ -108,7 +91,7 @@ static int    g_dpi = 96;
 static HHOOK  g_hook;
 static BOOL   g_pttEnabled = TRUE;
 static BOOL   g_blockKey   = TRUE;
-static int    g_lang       = 0;          /* 0 = RU, 1 = EN */
+static int    g_lang       = 0;
 static int    g_keyVK      = VK_HOME;
 static BOOL   g_keyDown    = FALSE;
 static BOOL   g_capturing  = FALSE;
@@ -118,7 +101,7 @@ static BOOL   g_balloonShown = FALSE;
 static NOTIFYICONDATAW g_nid;
 static wchar_t g_appDir[MAX_PATH], g_iniPath[MAX_PATH], g_logPath[MAX_PATH], g_exePath[MAX_PATH];
 static char    g_logPathA[MAX_PATH * 2];
-static int     g_micMuted  = -1;         /* -1 неизвестно, 0 снят, 1 заглушён */
+static int     g_micMuted  = -1;
 static int     g_micFailLogged = 0;
 static BOOL    g_hotkeyFallback = FALSE;
 
@@ -126,7 +109,6 @@ static BOOL    g_hotkeyFallback = FALSE;
 
 static const wchar_t *T(int id) { return g_lang ? S_EN[id] : S_RU[id]; }
 
-/* ================================ лог =================================== */
 static void log_line(const wchar_t *fmt, ...)
 {
     wchar_t msg[768], line[900];
@@ -149,10 +131,9 @@ static void log_line(const wchar_t *fmt, ...)
 }
 #define DBG(...) do { if (g_debug) log_line(__VA_ARGS__); } while (0)
 
-/* ============================ Core Audio (микрофон) ===================== */
 static IMMDeviceEnumerator *g_enum;
-static IAudioEndpointVolume *g_vol;      /* устройство связи (Discord/Skype/игры) */
-static IAudioEndpointVolume *g_vol2;     /* устройство по умолчанию (Windows может быть другое) */
+static IAudioEndpointVolume *g_vol;
+static IAudioEndpointVolume *g_vol2;
 
 static void mic_release(void)
 {
@@ -189,13 +170,13 @@ static BOOL mic_acquire(void)
             return FALSE;
         }
     }
-    g_vol = mic_open_role(eCommunications);      /* его берут Discord/Skype/игры */
+    g_vol = mic_open_role(eCommunications);
     if (!g_vol) g_vol = mic_open_role(eConsole);
     if (!g_vol) {
         if (!g_micFailLogged) { log_line(L"mic: no default capture endpoint"); g_micFailLogged = 1; }
         return FALSE;
     }
-    g_vol2 = mic_open_role(eConsole);            /* может совпасть с g_vol, может быть другой */
+    g_vol2 = mic_open_role(eConsole);
     g_micFailLogged = 0;
     DBG(L"mic: endpoint acquired");
     return TRUE;
@@ -223,7 +204,7 @@ static BOOL mic_set_mute(BOOL mute)
     if (!mic_acquire()) return FALSE;
     hr = IAudioEndpointVolume_SetMute(g_vol, mute, NULL);
     if (g_vol2) hr2 = IAudioEndpointVolume_SetMute(g_vol2, mute, NULL);
-    if (FAILED(hr) || FAILED(hr2)) {        /* устройство переключили/отключили — берём заново */
+    if (FAILED(hr) || FAILED(hr2)) {
         mic_release();
         if (!mic_acquire()) return FALSE;
         hr = IAudioEndpointVolume_SetMute(g_vol, mute, NULL);
@@ -253,7 +234,6 @@ static BOOL mic_get_mute(BOOL *out)
     return TRUE;
 }
 
-/* ====================== конфиг / автозапуск / имена клавиш =============== */
 static void config_load(void)
 {
     int v;
@@ -342,7 +322,6 @@ static void vk_name(int vk, wchar_t *out, int cch)
     swprintf(out, cch, L"VK 0x%02X", vk);
 }
 
-/* ============================== хук клавиатуры ========================== */
 static void refresh_ui(void);
 static void refresh_tray(void);
 static void apply_mic_state(void);
@@ -357,7 +336,7 @@ static LRESULT CALLBACK LLKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
 
         if (g_capturing) {
             if (down) {
-                if (vk == VK_ESCAPE) {                 /* Esc — отмена */
+                if (vk == VK_ESCAPE) {
                     g_capturing = FALSE;
                     DBG(L"key capture: cancelled");
                 } else {
@@ -369,7 +348,7 @@ static LRESULT CALLBACK LLKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
                 if (g_hwnd) PostMessageW(g_hwnd, WM_REFRESH, 0, 0);
                 hook_update();
             }
-            return 1;                                   /* не отдаём клавишу дальше */
+            return 1;
         }
 
         if (g_pttEnabled && (DWORD)g_keyVK == vk) {
@@ -382,7 +361,7 @@ static LRESULT CALLBACK LLKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
                 log_line(L"ptt: key up -> muted");
                 apply_mic_state();
             }
-            if (g_blockKey) return 1;                   /* клавишу не отдаём другим */
+            if (g_blockKey) return 1;
         }
     }
     return CallNextHookEx(NULL, nCode, wParam, lParam);
@@ -396,7 +375,7 @@ static void hook_update(void)
         if (g_hook) log_line(L"hook: installed (WH_KEYBOARD_LL)");
         else {
             log_line(L"hook: SetWindowsHookEx failed err=%lu", GetLastError());
-            if (g_pttEnabled && !g_hotkeyFallback) {   /* запасной путь */
+            if (g_pttEnabled && !g_hotkeyFallback) {
                 if (RegisterHotKey(g_hwnd, 1, MOD_NOREPEAT, (UINT)g_keyVK)) {
                     g_hotkeyFallback = TRUE;
                     log_line(L"hook: fallback RegisterHotKey OK");
@@ -414,10 +393,9 @@ static void hook_update(void)
     }
 }
 
-/* ============================ применение состояния ====================== */
 static void apply_mic_state(void)
 {
-    BOOL want = (g_pttEnabled && !g_keyDown) ? TRUE : FALSE;   /* TRUE = заглушён */
+    BOOL want = (g_pttEnabled && !g_keyDown) ? TRUE : FALSE;
     BOOL cur = FALSE;
     BOOL haveState;
 
@@ -437,7 +415,6 @@ static void apply_mic_state(void)
     refresh_ui(); refresh_tray();
 }
 
-/* ============================ UI: окно и трей =========================== */
 static HICON tray_icon(void)
 {
     int id;
@@ -540,7 +517,7 @@ static void on_exit(void)
     g_quitting = TRUE;
     if (g_hook) { UnhookWindowsHookEx(g_hook); g_hook = NULL; }
     if (g_hotkeyFallback && g_hwnd) { UnregisterHotKey(g_hwnd, 1); g_hotkeyFallback = FALSE; }
-    mic_set_mute(FALSE);                    /* не оставляем микрофон заглушённым */
+    mic_set_mute(FALSE);
     mic_release();
     log_line(L"exit");
     Shell_NotifyIconW(NIM_DELETE, &g_nid);
@@ -641,7 +618,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l)
         refresh_ui();
         return 0;
 
-    case WM_HOTKEY:                             /* запасной путь, если хук не встал */
+    case WM_HOTKEY:
         if (w == 1) {
             if (l & 0x80000000) g_keyDown = FALSE; else g_keyDown = TRUE;
             apply_mic_state();
@@ -672,7 +649,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l)
         break;
 
     case WM_CLOSE:
-        hide_window();                          /* закрытие = в трей, не выход */
+        hide_window();
         log_line(L"window closed -> tray");
         return 0;
 
@@ -690,7 +667,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l)
     return DefWindowProcW(h, m, w, l);
 }
 
-/* ============================ точка входа GUI =========================== */
 #ifndef APP_SELFTEST
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show)
 {
@@ -704,7 +680,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show)
     (void)hPrev; (void)cmdline; (void)show;
     g_hInst = hInst;
 
-    /* пути: %APPDATA%\PushToTalk */
     GetModuleFileNameW(NULL, g_exePath, MAX_PATH);
     if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata) == S_OK) {
         swprintf(g_appDir, MAX_PATH, L"%ls\\%ls", appdata, DIRNAME);
@@ -717,10 +692,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show)
     swprintf(g_logPath, MAX_PATH, L"%ls\\log.txt", g_appDir);
     WideCharToMultiByte(CP_ACP, 0, g_logPath, -1, g_logPathA, sizeof(g_logPathA), NULL, NULL);
 
-    /* лог начинаем заново при каждом старте */
     { FILE *f = fopen(g_logPathA, "wb"); if (f) fclose(f); }
 
-    /* одна копия приложения */
     mtx = CreateMutexW(NULL, TRUE, L"Local\\PushToTalkSingleInstance");
     if (mtx && GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND old = FindWindowW(L"PushToTalkWnd", NULL);
@@ -759,7 +732,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show)
                              NULL, NULL, hInst, NULL);
     if (!g_hwnd) { log_line(L"CreateWindowEx failed err=%lu", GetLastError()); return 1; }
 
-    /* трей */
     memset(&g_nid, 0, sizeof(g_nid));
     g_nid.cbSize = sizeof(g_nid);
     g_nid.hWnd = g_hwnd;
@@ -773,8 +745,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show)
     if (g_nid.hIcon) DestroyIcon(g_nid.hIcon);
 
     hook_update();
-    mic_set_mute(FALSE);            /* на старте всегда снимаем mute */
-    apply_mic_state();              /* затем — по текущему режиму PTT */
+    mic_set_mute(FALSE);
+    apply_mic_state();
     refresh_ui();
     SetTimer(g_hwnd, TIMER_POLL, 1500, NULL);
     ShowWindow(g_hwnd, SW_SHOW);
@@ -794,9 +766,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show)
     log_line(L"--- stopped");
     return 0;
 }
-#endif /* !APP_SELFTEST */
+#endif
 
-/* ============== консольный самотест (ptt_selftest.exe) ================== */
 #ifdef APP_SELFTEST
 static int g_pass, g_fail;
 static void check(const char *name, int ok, const char *info)
@@ -862,13 +833,11 @@ int main(int argc, char **argv)
     printf("ini     : "); pw(g_iniPath); printf("\n");
     printf("log     : "); pw(g_logPath); printf("\n\n");
 
-    /* 1. ключи клавиатуры */
     vk_name(VK_HOME, kn, 64);      check("key name HOME",      wcscmp(kn, L"HOME") == 0, "");
     vk_name(VK_F5, kn, 64);        check("key name F5",        wcscmp(kn, L"F5") == 0, "");
     vk_name('Q', kn, 64);          check("key name Q",         wcscmp(kn, L"Q") == 0, "");
     vk_name(VK_RCONTROL, kn, 64);  check("key name RIGHT CTRL", wcscmp(kn, L"RIGHT CTRL") == 0, "");
 
-    /* 2. конфиг */
     g_keyVK = VK_F8; g_pttEnabled = FALSE; g_blockKey = FALSE; g_lang = 1;
     config_save();
     g_keyVK = 0; g_pttEnabled = TRUE; g_blockKey = TRUE; g_lang = 0;
@@ -876,20 +845,18 @@ int main(int argc, char **argv)
     check("config round-trip", g_keyVK == VK_F8 && !g_pttEnabled && !g_blockKey && g_lang == 1,
           "saved key=F8 ptt=0 block=0 lang=EN, read back");
     g_keyVK = VK_HOME; g_pttEnabled = TRUE; g_blockKey = TRUE; g_lang = 0;
-    g_debug = FALSE; config_save();          /* вернуть дефолты (и не оставлять debug=1) */
+    g_debug = FALSE; config_save();
     {
         FILE *f = _wfopen(g_iniPath, L"rb");
         check("config.ini exists", f != NULL, "");
         if (f) fclose(f);
     }
 
-    /* 3. автозапуск (реестр HKCU\...\Run) */
     autostart_set(TRUE);
     check("autostart set -> registry", autostart_get(), "");
     autostart_set(FALSE);
     check("autostart cleared", !autostart_get(), "");
 
-    /* 4. Core Audio: доступ к микрофону и mute/unmute */
     if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) check("CoInitializeEx", 0, "failed");
     else check("CoInitializeEx", 1, "apartment threaded");
 
@@ -914,16 +881,13 @@ int main(int argc, char **argv)
         check("mic left unmuted", 0, "skipped: no endpoint");
     }
 
-    /* 5. хук клавиатуры */
     hk = SetWindowsHookExW(WH_KEYBOARD_LL, LLKbdProc, GetModuleHandleW(NULL), 0);
     check("install WH_KEYBOARD_LL", hk != NULL, "");
     if (hk) UnhookWindowsHookEx(hk);
 
-    /* 6. запасной путь: RegisterHotKey на поток */
     check("RegisterHotKey(VK_HOME)", RegisterHotKey(NULL, 1, MOD_NOREPEAT, VK_HOME) != 0, "");
     UnregisterHotKey(NULL, 1);
 
-    /* 7. окно и трей: создаём настоящее окно и иконку в трее */
     {
         HWND w = CreateWindowExW(0, L"STATIC", L"ptt_selftest", WS_OVERLAPPED, 0,0,100,100, NULL, NULL, NULL, NULL);
         check("CreateWindow", w != NULL, "");
@@ -937,4 +901,4 @@ int main(int argc, char **argv)
     log_line(L"self-test done: %d passed, %d failed", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }
-#endif /* APP_SELFTEST */
+#endif

@@ -2,7 +2,7 @@
 """Генератор иконок микрофона для PushToTalk (без внешних зависимостей)."""
 import struct, math
 
-SS = 8  # суперсэмплинг
+SS = 8
 
 def rrect(x, y, x0, y0, x1, y1, r):
     cx = min(max(x, x0 + r), x1 - r)
@@ -14,20 +14,19 @@ def mic_coverage(x, y, slash):
     if not body:
         d = math.hypot(x - 16.0, y - 17.0)
         if y >= 17.0 and 6.2 <= d <= 7.9:
-            body = True                      # скоба-держатель
+            body = True
     if not body:
         if 15.0 <= x <= 17.0 and 24.0 <= y <= 27.4:
-            body = True                      # ножка
+            body = True
     if not body:
         if rrect(x, y, 10.4, 27.0, 21.6, 29.2, 1.0):
-            body = True                      # основание
+            body = True
     if slash:
-        # полоса «заглушено»: |(x-16) - (y-16)| < w  (диагональ сверху-слева вниз-вправо)
         dd = abs((x - 16.0) + (y - 16.0))
         if dd < 1.7:
-            return 0                          # тёмный контур полосы
+            return 0
         if dd < 1.05:
-            return 2                          # белая сердцевина полосы
+            return 2
     return 1 if body else 0
 
 def render(size, rgb, slash):
@@ -51,7 +50,6 @@ def render(size, rgb, slash):
                 row[px] = (0, 0, 0, 0)
             else:
                 wc = white / (SS * SS)
-                # смешиваем цвет значка с белой сердцевиной полосы
                 r = int(rgb[0] * (1 - wc / cov) + 255 * (wc / cov))
                 g = int(rgb[1] * (1 - wc / cov) + 255 * (wc / cov))
                 b = int(rgb[2] * (1 - wc / cov) + 255 * (wc / cov))

@@ -1,4 +1,3 @@
-/* resource.h — ids for PushToTalk */
 #ifndef RESOURCE_H
 #define RESOURCE_H
 

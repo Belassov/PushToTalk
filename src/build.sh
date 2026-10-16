@@ -1,5 +1,4 @@
 #!/bin/sh
-# Сборка PushToTalk.exe (GUI) и ptt_selftest.exe (консольный самотест) кросс-компилятором mingw-w64
 set -e
 cd "$(dirname "$0")"
 python3 make_icons.py
