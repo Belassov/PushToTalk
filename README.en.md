@@ -1,103 +1,68 @@
-# Push-to-Talk — microphone on a key (Windows)
+# Push to Talk
 
-A tiny Windows app that turns a key on your keyboard into a **push-to-talk button for your
-microphone**. Hold the key — the mic is live. Release it — the mic is muted.
+Push-to-talk microphone for Windows: hold a key to talk, release to mute. The app lives in
+the tray and stays out of the way.
 
-**РУССКОЕ** описание: [README.md](README.md)
+[Русская версия →](README.md)
 
-![Push-to-Talk](screenshot_en.png)
+![Push to Talk](screenshot.png)
 
-**Download:** grab `PushToTalk.exe` from the [latest release](../../releases/latest) — one file,
-no installer, no Python, no .NET, nothing else to install.
+## Features
 
-## What it does
+* The microphone stays muted until you hold the push-to-talk key (default **HOME**).
+* The key is changed right in the window: "Change" → press the key you want (Esc cancels).
+* Push-to-talk can be turned off — the microphone then stays always live.
+* Key blocking: with the switch on, the key does not reach a game or editor.
+* Start with Windows — the green tick in the bottom-right corner of the window.
+* Tray: the icon shows the microphone state (live / muted / no device), a single left click
+  opens the window, right click opens the menu (settings, toggle PTT, exit).
+* Signal level meter and recording device name — you can see the microphone really hears you.
+* UI language RU / EN — the button in the footer, it also switches the tray menu.
+* The close button, minimizing and Esc hide the window to the tray; the real exit is
+  "Exit" in the window or in the tray menu.
+* The window is compact, 16:9: the app mainly runs in the tray, so the size is meant for
+  opening, checking and closing.
 
-* **Push-to-talk on any key** — default is **HOME**, you can rebind it to anything.
-* **Turn PTT off** — then the microphone is always live; the app stays in the process list and
-  in the tray, it does not close.
-* **Tray icon** — closing the window (X) or minimizing it hides the app into the tray instead of
-  exiting. Icon colour shows the state: green = mic live, red = muted, grey = mic unavailable.
-* **Start with Windows** — one checkbox (no administrator rights needed).
-* **RU / EN interface** — one button to switch.
-* **Block the key in other apps** — optional: while PTT is on, the key is used only as a
-  push-to-talk button and does not reach the game or browser.
+## Requirements
+
+Windows 10 or 11. The WebView2 Runtime component is required — it already ships with Edge on
+Windows 10/11. Nothing else: the .NET runtime and the interface are inside the exe.
+
+## Install
+
+1. Download `PushToTalk.exe` from the [latest release](../../releases/latest).
+2. Run it — the app appears in the tray (a microphone icon).
+3. On the first launch the microphone is muted; it goes live while you hold the PTT key.
+
+## Settings and log
+
+* `%APPDATA%\PushToTalk\config.ini` — key, PTT on/off, key blocking, language. It can be edited
+  by hand, but normally everything is changed in the window.
+* `%APPDATA%\PushToTalk\log.txt` — startup, PTT key presses, microphone switches, errors.
+* Autostart: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `PushToTalk`.
 
 ## How it works
 
-* The mic is muted/unmuted through the Windows **Core Audio API**
-  (`IAudioEndpointVolume::SetMute`) on the default recording device. That is the same mute you
-  see when you press "mute" on the microphone in Windows sound settings, so **every program sees
-  it** — Discord, Skype, games, browsers, voice recorders.
-* The PTT key is caught by a **global low-level keyboard hook** (`WH_KEYBOARD_LL`), so it works
-  in any window. When push-to-talk is switched off, the hook is removed completely — the app does
-  not intercept the keyboard at all.
-* The microphone is always un-muted on start and on exit, so it never stays silent after you
-  close the app.
+The app subscribes to the keyboard (WH_KEYBOARD_LL), so it sees the PTT key in any application,
+not only when its window is focused. While the key is held, the microphone is unmuted through
+CoreAudio (communications and default devices); on release it is muted again. The microphone
+state is checked once a second, so changes made by other apps are reflected as well.
 
-## Usage
+## Build
 
-1. Put `PushToTalk.exe` somewhere permanent, e.g. `C:\Users\<you>\Apps\PushToTalk\`
-   (autostart stores the path to the file, so it is best not to move it afterwards).
-2. Run it.
-3. Optional: tick **Start with Windows** (writes to `HKCU\...\CurrentVersion\Run`, no admin rights).
-4. Hold your key while you want to be heard.
-
-Settings window buttons:
-
-| Control | What it does |
-|---|---|
-| Change key | Click, then press the key you want (Esc cancels) |
-| Push-to-talk enabled | Untick to keep the mic always live |
-| Block the key in other apps | Untick if the same key is also needed as a normal key |
-| Start with Windows | Autostart |
-| Language | RU / EN |
-| Exit | Real exit (the X button only hides to tray) |
-
-Tray menu: *Open settings*, *Toggle push-to-talk*, *Exit*.
-
-## Settings and logs
-
-* Settings: `%APPDATA%\PushToTalk\config.ini`
-* Log: `%APPDATA%\PushToTalk\log.txt` — every start, key press/release, mic mute/unmute and any
-  error is written there, so it is the first place to look if something misbehaves.
-
-There is also `PushToTalk_selftest.exe` (diagnostics):
+You need the .NET SDK 8 (the official Microsoft one) and this command:
 
 ```
-PushToTalk_selftest.exe            full self-test (16 checks)
-PushToTalk_selftest.exe --get      print the microphone mute state
-PushToTalk_selftest.exe --mute     mute the microphone
-PushToTalk_selftest.exe --unmute   unmute the microphone
+dotnet publish -c Release -r win-x64
 ```
 
-## Built with
+The result is a single exe with both the logic and the interface inside. The interface lives in
+`ui/` — you can open it in a browser (`ui/preview.html`) to look at it without building.
 
-* **C**, plain **Win32 API** — no frameworks, no runtime dependencies. The whole app is one
-  ~100 KB `PushToTalk.exe`.
-* Core Audio API (`IAudioEndpointVolume`) for the microphone, `Shell_NotifyIcon` for the tray,
-  `WH_KEYBOARD_LL` for the global key, `RegCreateKeyEx` for autostart, INI file for settings.
-* Cross-compiled with **mingw-w64** (`x86_64-w64-mingw32-gcc`); icons generated by
-  `src/make_icons.py`. Requirements: Windows 10 / 11, 64-bit.
+## Changelog
 
-## Build from source
-
-```sh
-cd src
-x86_64-w64-mingw32-windres app.rc -o app_res.o
-x86_64-w64-mingw32-gcc -O2 -mwindows ptt_mic.c app_res.o -o PushToTalk.exe \
-    -lole32 -lshell32 -luser32 -lgdi32 -lcomctl32 -static -s
-```
-
-or simply run `src/build.sh` (also builds `PushToTalk_selftest.exe`).
-
-## Notes
-
-* The .exe is not code-signed, so SmartScreen may warn about an unknown publisher:
-  *More info → Run anyway*.
-* If you kill the process from Task Manager while PTT is on and no key is held, the microphone
-  can stay muted. Just start the app again — it always unmutes on start.
-* The application was developed and fully tested on Windows 10. Issues and pull requests are welcome.
+[CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. The sources of the first version (C/Win32) are in `legacy-c/`.

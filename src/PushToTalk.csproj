@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <AssemblyName>PushToTalk</AssemblyName>
+    <RootNamespace>PushToTalk</RootNamespace>
+    <ApplicationIcon>mic_live.ico</ApplicationIcon>
+    <Version>2.0.0</Version>
+    <AssemblyTitle>Push to Talk</AssemblyTitle>
+    <Product>Push to Talk</Product>
+    <Company>REN3D</Company>
+
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <!-- папка комплекта не должна попадать в компиляцию -->
+  <ItemGroup>
+    <Compile Remove="dist/**" />
+    <None Remove="dist/**" />
+    <EmbeddedResource Remove="dist/**" />
+  </ItemGroup>
+
+  <!-- Интерфейс вшит в exe: распаковывается в %APPDATA%\PushToTalk\ui при запуске -->
+  <ItemGroup>
+    <EmbeddedResource Include="app\index.html" LogicalName="ui/index.html" />
+    <EmbeddedResource Include="app\style.css"  LogicalName="ui/style.css" />
+    <EmbeddedResource Include="app\fonts.css"  LogicalName="ui/fonts.css" />
+    <EmbeddedResource Include="app\app.js"     LogicalName="ui/app.js" />
+    <EmbeddedResource Include="app\fonts\*.woff2" LogicalName="ui/fonts/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="mic_live.ico"   LogicalName="app/mic_live.ico" />
+    <EmbeddedResource Include="mic_muted.ico"  LogicalName="app/mic_muted.ico" />
+    <EmbeddedResource Include="mic_off.ico"    LogicalName="app/mic_off.ico" />
+  </ItemGroup>
+
+</Project>

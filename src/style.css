@@ -1,0 +1,386 @@
+/* Подстрочник — интерфейс приложения. Основа — макет заказчика (Catppuccin Mocha),
+   правки: окно занимает всю область клиента (скругление даёт система), локальные шрифты,
+   тёмные полосы прокрутки, состояния «пусто» и «неактивно», живые данные вместо демо. */
+
+:root{
+  --base:#1e1e2e; --mantle:#181825; --crust:#11111b;
+  --surface0:#313244; --surface1:#45475a; --surface2:#585b70;
+  --overlay0:#6c7086; --overlay1:#7f849c;
+  --text:#cdd6f4; --subtext0:#a6adc8; --subtext1:#bac2de;
+  --lavender:#b4befe; --blue:#89b4fa; --sapphire:#74c7ec; --teal:#94e2d5;
+  --green:#a6e3a1; --peach:#fab387; --mauve:#cba6f7; --red:#f38ba8; --yellow:#f9e2af;
+
+  --r-window:14px; --r-card:12px; --r-pill:999px;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --ui:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--ui);
+  background:var(--base);
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+
+/* ---------- Окно: заполняет клиентскую область, форму даёт система ---------- */
+.window{
+  width:100%;height:100%;
+  background:var(--base);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+/* ---------- Шапка ---------- */
+.titlebar{
+  flex:0 0 62px;display:flex;align-items:center;gap:11px;
+  padding:0 12px 0 14px;
+  border-bottom:1px solid var(--surface0);
+  background:linear-gradient(180deg,#202030,#1c1c2b);
+}
+.logo{
+  width:34px;height:34px;flex:0 0 34px;border-radius:10px;
+  background:linear-gradient(145deg,rgba(148,226,213,.20),rgba(116,199,236,.14));
+  border:1px solid rgba(148,226,213,.35);
+  display:flex;align-items:center;justify-content:center;
+}
+.titles{display:flex;flex-direction:column;gap:2px;min-width:0}
+.titles h1{font-size:15px;font-weight:600;letter-spacing:.1px;line-height:1.1}
+.titles span{font-size:11px;color:var(--subtext0);line-height:1.1}
+.win-buttons{margin-left:auto;display:flex;align-items:center;gap:2px}
+.win-btn{
+  width:32px;height:32px;border:0;background:transparent;border-radius:8px;
+  color:var(--subtext0);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:background .15s ease,color .15s ease;
+}
+.win-btn:hover{background:var(--surface0);color:var(--text)}
+.win-btn.close:hover{background:rgba(243,139,168,.16);color:var(--red)}
+
+/* ---------- Тело ---------- */
+.body{
+  flex:1 1 auto;min-height:0;
+  display:flex;flex-direction:column;gap:10px;
+  padding:12px 14px;
+}
+
+/* Поле ввода */
+.source{
+  flex:0 0 150px;position:relative;
+  background:var(--mantle);
+  border:1px solid var(--surface1);
+  border-radius:var(--r-card);
+  padding:12px 13px;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.source:hover{border-color:var(--surface2)}
+.source textarea{
+  width:100%;height:100%;resize:none;border:0;outline:0;background:transparent;
+  font-family:var(--ui);font-size:13.5px;line-height:1.45;color:var(--text);
+  user-select:text;
+}
+.source textarea::placeholder{color:var(--overlay0)}
+.source:focus-within{border-color:var(--lavender);box-shadow:0 0 0 3px rgba(180,190,254,.10)}
+
+/* Строка режима + кнопки */
+.translate-head{flex:0 0 auto;display:flex;flex-direction:column;gap:9px}
+.mode{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--subtext0)}
+.row-actions{display:flex;align-items:center;gap:8px}
+.pill{
+  display:inline-flex;align-items:center;gap:7px;
+  height:34px;padding:0 15px;border-radius:var(--r-pill);
+  font-family:var(--ui);font-size:12.5px;font-weight:500;letter-spacing:.1px;
+  border:1px solid transparent;cursor:pointer;white-space:nowrap;
+  transition:transform .12s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease,opacity .15s ease;
+}
+.pill:active{transform:translateY(1px)}
+.pill[disabled]{opacity:.45;cursor:default;transform:none}
+.pill-primary{
+  background:linear-gradient(135deg,var(--blue),var(--lavender));
+  color:#191926;border-color:rgba(205,214,244,.35);
+  box-shadow:0 4px 14px rgba(137,180,250,.22);
+}
+.pill-primary:hover:not([disabled]){filter:brightness(1.06);box-shadow:0 6px 18px rgba(137,180,250,.32)}
+.pill-green{background:rgba(166,227,161,.08);color:var(--green);border-color:rgba(166,227,161,.45)}
+.pill-green:hover:not([disabled]){background:rgba(166,227,161,.16);border-color:var(--green)}
+.pill-peach{background:rgba(250,179,135,.08);color:var(--peach);border-color:rgba(250,179,135,.45)}
+.pill-peach:hover:not([disabled]){background:rgba(250,179,135,.16);border-color:var(--peach)}
+
+/* ---------- Карточки ---------- */
+.card{
+  background:var(--mantle);
+  border:1px solid var(--surface0);
+  border-radius:var(--r-card);
+  overflow:hidden;
+  display:flex;flex-direction:column;min-height:0;
+}
+.card.translate{flex:0 0 auto;max-height:40%}
+.card.chat{flex:1 1 auto;min-height:170px}
+.card-head{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 13px;flex:0 0 auto;
+}
+.card-head .when{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--overlay0)}
+.card-title{font-size:13.5px;font-weight:600;color:var(--text)}
+.card-body{padding:0 13px 12px;font-size:13.5px;line-height:1.48;color:var(--subtext1);
+  overflow-y:auto;min-height:0;user-select:text}
+.card-foot{
+  display:flex;align-items:center;gap:7px;flex:0 0 auto;
+  padding:8px 13px;border-top:1px solid var(--surface0);
+  font-size:11.5px;color:var(--overlay1);
+}
+.card-foot svg{flex:0 0 auto}
+.empty{color:var(--overlay0)}
+
+/* ---------- Чат ---------- */
+.chat-head{
+  display:flex;gap:9px;padding:11px 13px 9px;flex:0 0 auto;
+  border-bottom:1px solid rgba(69,71,90,.5);
+}
+.chat-head p{font-size:12px;line-height:1.35;color:var(--subtext0)}
+.chat-head svg{flex:0 0 18px}
+.chat-body{
+  flex:1 1 auto;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;gap:9px;padding:10px 13px 12px;
+}
+.chat-body > *:first-child{margin-top:auto}   /* лента прижата к низу */
+
+.msg-user{align-self:flex-end;display:flex;align-items:flex-start;gap:9px;max-width:92%}
+.bubble{
+  background:#2b2c44;border:1px solid rgba(137,180,250,.22);
+  border-radius:12px;padding:9px 11px 6px;
+  font-size:12.5px;line-height:1.42;color:var(--text);user-select:text;
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.bubble time{display:block;text-align:right;font-size:10px;color:var(--overlay0);margin-top:3px}
+.avatar{
+  width:30px;height:30px;flex:0 0 30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+}
+.avatar.me{background:rgba(203,166,247,.20);border:1px solid rgba(203,166,247,.45)}
+.avatar.bot{background:rgba(148,226,213,.16);border:1px solid rgba(148,226,213,.40)}
+
+.msg-bot{display:flex;align-items:flex-start;gap:9px}
+.msg-bot .reply{flex:1 1 auto;min-width:0;padding-top:3px}
+.reply-name{font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:4px}
+.reply-text{font-size:13px;line-height:1.45;color:var(--subtext1);user-select:text;
+  white-space:pre-wrap;overflow-wrap:anywhere}
+.reply-text .sep{display:block;height:6px}
+.reply-time{display:block;text-align:right;font-size:10px;color:var(--overlay0);margin-top:4px}
+
+/* Строка ввода чата */
+.compose{
+  flex:0 0 auto;padding:9px 12px 11px;
+  border-top:1px solid rgba(69,71,90,.5);
+  background:rgba(17,17,27,.35);
+}
+.compose-field{
+  display:flex;align-items:flex-end;gap:7px;
+  height:46px;padding:6px;   /* как в макете; при многострочном вводе высоту увеличивает JS */
+  background:var(--surface0);
+  border:1px solid var(--surface2);
+  border-radius:var(--r-card);
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.compose-field:hover{border-color:var(--overlay0)}
+.compose-field:focus-within{border-color:var(--lavender);box-shadow:0 0 0 3px rgba(180,190,254,.10)}
+.compose-field textarea{
+  flex:1 1 auto;min-width:0;height:auto;min-height:32px;max-height:132px;overflow-y:auto;
+  resize:none;border:0;outline:0;background:transparent;
+  font-family:var(--ui);font-size:12.5px;line-height:22px;color:var(--text);
+  padding:5px 0;user-select:text;   /* однострочный вид совпадает с макетом, дальше поле растёт */
+}
+.compose-field textarea::placeholder{color:var(--subtext0)}
+.compose-icon{
+  width:30px;height:30px;flex:0 0 30px;border:0;border-radius:50%;
+  background:transparent;color:var(--overlay1);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s ease,color .15s ease;
+}
+.compose-icon:hover{background:var(--surface1);color:var(--text)}
+.compose-icon[disabled]{opacity:.4;cursor:default}
+.compose-send{
+  width:34px;height:34px;flex:0 0 34px;border:0;border-radius:50%;cursor:pointer;
+  background:linear-gradient(135deg,var(--mauve),var(--blue));
+  color:#191926;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 12px rgba(203,166,247,.25);
+  transition:filter .15s ease,box-shadow .15s ease,transform .12s ease,opacity .15s ease;
+}
+.compose-send:hover:not([disabled]){filter:brightness(1.08);box-shadow:0 5px 16px rgba(203,166,247,.38)}
+.compose-send:active:not([disabled]){transform:translateY(1px)}
+.compose-send[disabled]{opacity:.35;box-shadow:none;cursor:default}
+
+/* ---------- Футер ---------- */
+.footer{
+  flex:0 0 62px;display:flex;align-items:center;gap:14px;
+  padding:0 12px 0 14px;
+  border-top:1px solid var(--surface0);
+  background:linear-gradient(180deg,#1c1c2b,#202030);
+}
+.hotkeys{display:flex;flex-direction:column;gap:5px}
+.hk{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--overlay1);white-space:nowrap}
+kbd{
+  font-family:var(--mono);font-size:10px;font-weight:500;line-height:1;
+  color:var(--subtext1);background:var(--surface0);
+  border:1px solid var(--surface1);border-radius:4px;padding:3px 5px;
+}
+.hk .plus{color:var(--overlay0);font-family:var(--mono);font-size:10px}
+.hk .badge{font-family:var(--mono);font-size:10px;color:var(--peach)}
+.hk svg{flex:0 0 auto}
+
+.context{
+  margin-left:auto;display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--subtext0);white-space:nowrap;
+}
+.context b{font-weight:500;color:var(--green)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(166,227,161,.16)}
+.dot.warn{background:var(--peach);box-shadow:0 0 0 3px rgba(250,179,135,.16)}
+.dot.bad{background:var(--red);box-shadow:0 0 0 3px rgba(243,139,168,.16)}
+
+.ghost{
+  display:inline-flex;align-items:center;gap:7px;
+  height:32px;padding:0 12px;border-radius:var(--r-pill);
+  background:var(--surface0);border:1px solid var(--surface1);
+  color:var(--subtext1);font-family:var(--ui);font-size:11.5px;font-weight:500;
+  cursor:pointer;white-space:nowrap;
+  transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.ghost:hover{background:var(--surface1);border-color:var(--surface2);color:var(--text)}
+.ghost[disabled]{opacity:.45;cursor:default}
+.icon-btn{
+  width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;
+  border-radius:9px;background:rgba(166,227,161,.10);border:1px solid rgba(166,227,161,.40);
+  cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.icon-btn:hover{background:rgba(166,227,161,.20);border-color:var(--green)}
+.icon-btn svg{stroke:var(--green)}
+.icon-btn.off{background:var(--surface0);border-color:var(--surface1)}
+.icon-btn.off svg{stroke:var(--overlay0)}
+.icon-btn.off:hover{background:var(--surface1);border-color:var(--surface2)}
+
+/* ---------- Полосы прокрутки в тёмной теме ---------- */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface1);border-radius:99px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--surface2);background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* Служебная полоса-статус (появляется только когда есть что сказать) */
+.status-line{
+  flex:0 0 auto;display:none;align-items:center;gap:8px;
+  padding:7px 14px 0;font-size:11.5px;color:var(--subtext0);
+}
+.status-line.show{display:flex}
+.status-line.warn{color:var(--yellow)}
+.status-line.err{color:var(--red)}
+
+/* ===================== Push to Talk: дополнения к общей теме ===================== */
+
+/* Карточка состояния — крупный индикатор микрофона */
+.card.state{
+  flex:1 1 auto;min-height:260px;
+  align-items:center;justify-content:center;gap:14px;padding:26px 20px;
+  text-align:center;
+}
+.state-badge{
+  width:92px;height:92px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(250,179,135,.12);border:1px solid rgba(250,179,135,.45);
+  transition:background .2s ease,border-color .2s ease;
+}
+.state-badge svg{stroke:var(--peach)}
+.state-badge.live{background:rgba(148,226,213,.14);border-color:rgba(148,226,213,.5);
+  animation:pulse 1.9s ease-in-out infinite}
+.state-badge.live svg{stroke:var(--teal)}
+.state-badge.off{background:rgba(137,220,235,.12);border-color:rgba(137,220,235,.45)}
+.state-badge.off svg{stroke:var(--sky)}
+.state-badge.bad{background:rgba(243,139,168,.14);border-color:rgba(243,139,168,.5)}
+.state-badge.bad svg{stroke:var(--red)}
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(148,226,213,.28)}
+  50%{box-shadow:0 0 0 14px rgba(148,226,213,0)}
+}
+.state-title{font-size:17px;font-weight:600;letter-spacing:.1px}
+.state-hint{font-size:12.5px;color:var(--subtext0);max-width:520px;line-height:1.45}
+
+/* Карточка настроек: строки с переключателями */
+.settings{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;gap:14px;padding:11px 13px;border-top:1px solid rgba(69,71,90,.45)}
+.row:first-child{border-top:0}
+.row-main{flex:1 1 auto;min-width:0}
+.row-title{font-size:13px;font-weight:500;color:var(--text)}
+.row-hint{font-size:11.5px;color:var(--overlay0);margin-top:2px;line-height:1.35}
+.row-side{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.pill-lavender{background:rgba(180,190,254,.10);color:var(--lavender);border-color:rgba(180,190,254,.45)}
+.pill-lavender:hover:not([disabled]){background:rgba(180,190,254,.18);border-color:var(--lavender)}
+.pill.capture{background:linear-gradient(135deg,var(--mauve),var(--blue));color:#191926;border-color:rgba(205,214,244,.35)}
+
+/* Переключатель */
+.switch{
+  width:46px;height:26px;flex:0 0 46px;border-radius:999px;cursor:pointer;position:relative;
+  background:var(--surface0);border:1px solid var(--surface2);padding:0;
+  transition:background .16s ease,border-color .16s ease;
+}
+.switch::after{
+  content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+  background:var(--overlay0);transition:transform .16s ease,background .16s ease;
+}
+.switch.on{background:rgba(166,227,161,.18);border-color:rgba(166,227,161,.55)}
+.switch.on::after{transform:translateX(20px);background:var(--green)}
+.switch:hover{border-color:var(--overlay0)}
+
+/* Пояснительная строка */
+.note{
+  flex:0 0 auto;display:flex;align-items:flex-start;gap:9px;
+  padding:10px 13px;border-radius:var(--r-card);
+  background:var(--mantle);border:1px solid var(--surface0);
+  font-size:11.5px;line-height:1.45;color:var(--overlay1);
+}
+.note svg{flex:0 0 auto;margin-top:1px}
+
+/* Индикатор уровня сигнала микрофона */
+.level{
+  width:320px;max-width:80%;height:8px;border-radius:99px;
+  background:var(--surface0);border:1px solid var(--surface1);overflow:hidden;
+}
+.level-fill{
+  height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--teal),var(--green));
+  transition:width .09s linear;
+}
+.state-device{font-size:11.5px;color:var(--overlay0);max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ============ Push to Talk: компактное окно 640x360 (16 к 9) ============
+   Программа живёт в трее, окно маленькое: состояние слева, настройки ниже,
+   подсказки внутри строк убраны, чтобы всё влезало без прокрутки. */
+.titlebar{flex:0 0 42px;gap:9px;padding:0 8px 0 10px}
+.logo{width:26px;height:26px;flex:0 0 26px;border-radius:8px}
+.titles h1{font-size:13px}
+.titles span{font-size:10px}
+.win-btn{width:28px;height:28px;border-radius:7px}
+.body{padding:9px 11px;gap:8px}
+.card.state{
+  flex:1 1 auto;min-height:0;flex-direction:row;align-items:center;
+  gap:13px;padding:11px 13px;text-align:left;
+}
+.state-badge{width:58px;height:58px;flex:0 0 58px}
+.state-badge svg{width:26px;height:26px}
+.state-info{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1 1 auto}
+.state-title{font-size:14.5px}
+.state-hint{font-size:11.5px;max-width:none}
+.level{width:100%;max-width:280px;height:6px}
+.state-device{font-size:10.5px;max-width:100%}
+.settings .row{padding:7px 11px;gap:10px}
+.row-title{font-size:12.5px}
+.row-hint{display:none}                 /* подсказки не нужны: места мало, смысл ясен из подписи */
+kbd{font-size:10px;padding:2px 5px}
+.pill{height:28px;padding:0 12px;font-size:12px}
+.switch{width:40px;height:22px;flex:0 0 40px}
+.switch::after{width:16px;height:16px;top:2px;left:2px}
+.switch.on::after{transform:translateX(18px)}
+.footer{flex:0 0 46px;gap:10px;padding:0 10px}
+.hk{font-size:10px}
+.ghost{height:28px;padding:0 10px;font-size:11px;gap:5px}
+.icon-btn{width:28px;height:28px;flex:0 0 28px;border-radius:8px}
+.context{font-size:10.5px}
+.status-line{padding:5px 11px 0;font-size:11px}

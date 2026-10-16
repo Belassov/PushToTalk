@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Push to Talk</title>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="window">
+
+  <!-- ШАПКА -->
+  <header class="titlebar" data-drag>
+    <div class="logo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94e2d5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="2.6" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.4"/>
+      </svg>
+    </div>
+    <div class="titles">
+      <h1>Push to Talk</h1>
+      <span id="subtitle">микрофон по кнопке</span>
+    </div>
+    <div class="win-buttons">
+      <button class="win-btn" data-win="min" aria-label="Свернуть" title="Свернуть в трей">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      </button>
+      <button class="win-btn close" data-win="close" aria-label="Закрыть" title="Скрыть в трей">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ТЕЛО -->
+  <div class="body">
+
+    <!-- Состояние микрофона -->
+    <section class="card state">
+      <div class="state-badge" id="badge">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fab387" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2.6" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.4"/>
+          <path id="slash" d="M4 4l16 16"/>
+        </svg>
+      </div>
+      <div class="state-info">
+        <div class="state-title" id="state-text">Микрофон заглушён</div>
+        <div class="state-hint" id="state-hint">Зажми кнопку — говори, отпустишь — заглушится.</div>
+        <div class="level" title="Уровень сигнала с микрофона">
+          <div class="level-fill" id="level-fill"></div>
+        </div>
+        <div class="state-device" id="state-device"></div>
+      </div>
+    </section>
+
+    <div class="status-line" id="status"></div>
+
+    <!-- Настройки -->
+    <section class="card">
+      <div class="settings">
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title" id="key-row-title">Клавиша push-to-talk</div>
+          </div>
+          <div class="row-side">
+            <kbd id="key-name">HOME</kbd>
+            <button class="pill pill-lavender" id="btn-key">Изменить</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title" id="ptt-row-title">Push-to-talk включён</div>
+          </div>
+          <div class="row-side"><button class="switch" id="sw-ptt" role="switch" aria-checked="true"></button></div>
+        </div>
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title" id="block-row-title">Блокировать клавишу в других программах</div>
+          </div>
+          <div class="row-side"><button class="switch" id="sw-block" role="switch" aria-checked="true"></button></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ФУТЕР -->
+  <footer class="footer">
+    <div class="hotkeys">
+      <div class="hk" title="Клавиша push-to-talk — держи, чтобы говорить">
+        <kbd id="hk-key">HOME</kbd>
+        <span id="hk-key-label">говорить</span>
+      </div>
+    </div>
+
+    <div class="context">
+      <span class="dot" id="ctx-dot"></span>
+      <b id="ctx-text">PTT включён</b>
+    </div>
+
+    <button class="ghost" id="btn-lang" title="Сменить язык интерфейса">RU / EN</button>
+
+    <button class="ghost" id="btn-exit" title="Полный выход из приложения">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 5.5V4.2A1.2 1.2 0 0 0 13.8 3H5.2A1.2 1.2 0 0 0 4 4.2v15.6A1.2 1.2 0 0 0 5.2 21h8.6a1.2 1.2 0 0 0 1.2-1.2v-1.3M9 12h11M17 8.6l3.4 3.4-3.4 3.4"/>
+      </svg>
+      <span id="exit-label">Выход</span>
+    </button>
+
+    <button class="icon-btn" id="btn-autostart" title="Запускать с Windows" aria-label="Запускать с Windows">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a6e3a1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.8l4.4 4.4L19 7.6"/></svg>
+    </button>
+  </footer>
+
+</div>
+<script>window.__forceDemo = true;</script>
+<script src="app.js"></script>
+</body>
+</html>

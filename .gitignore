@@ -1,2 +1,4 @@
-*.o
-/app_res.o
+bin/
+obj/
+dist/
+*.user
