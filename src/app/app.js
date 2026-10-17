@@ -11,13 +11,13 @@
       subtitle: 'микрофон по кнопке',
       stateLive: 'Микрофон активен', hintLive: 'Говори — звук захватывается.',
       stateMuted: 'Микрофон заглушён', hintMuted: 'Зажми {key} — и говори, отпустишь — заглушится.',
+      hintToggle: 'Нажмите {key} — микрофон включится, нажмите ещё раз — выключится.',
       stateOff: 'Push-to-talk выключен', hintOff: 'Микрофон всегда активен. Включи PTT, чтобы говорить по кнопке.',
       stateBad: 'Микрофон недоступен', hintBad: 'Нет устройства записи или оно занято другой программой.',
-      settings: 'Настройки',
-      keyTitle: 'Клавиша push-to-talk', keyHint: 'Пока держишь её — микрофон активен',
-      pttTitle: 'Push-to-talk включён', pttHint: 'Выключи, если микрофон должен быть всегда активен',
-      blockTitle: 'Блокировать клавишу в других программах', blockHint: 'Клавиша не попадёт в игру или редактор',
-      note: 'Сворачивание и крестик прячут окно в трей, приложение продолжает работать. Полный выход — «Выход» здесь или в меню трея.',
+      keyTitle: 'Клавиша push-to-talk',
+      pttTitle: 'Push-to-talk включён',
+      toggleTitle: 'Переключение одним нажатием',
+      blockTitle: 'Блокировать клавишу в других программах',
       talk: 'говорить', tray: 'трей', showWin: 'показать окно', exit: 'Выход',
       change: 'Изменить', capture: 'Нажми клавишу…',
       devicePrefix: 'Микрофон: ',
@@ -32,13 +32,13 @@
       subtitle: 'microphone on a key',
       stateLive: 'Microphone is live', hintLive: 'Talk — sound is being captured.',
       stateMuted: 'Microphone is muted', hintMuted: 'Hold {key} and talk; release to mute.',
+      hintToggle: 'Press {key} to switch the microphone on, press again to switch off.',
       stateOff: 'Push-to-talk is off', hintOff: 'The mic is always live. Turn PTT on to talk on a key.',
       stateBad: 'Microphone unavailable', hintBad: 'No recording device, or it is in use by another app.',
-      settings: 'Settings',
-      keyTitle: 'Push-to-talk key', keyHint: 'Hold it while you talk',
-      pttTitle: 'Push-to-talk enabled', pttHint: 'Turn off to keep the microphone always live',
-      blockTitle: 'Block the key in other apps', blockHint: 'The key will not reach a game or editor',
-      note: 'Minimizing and closing hide the window to the tray; the app keeps running. To quit, use “Exit” here or in the tray menu.',
+      keyTitle: 'Push-to-talk key',
+      pttTitle: 'Push-to-talk enabled',
+      toggleTitle: 'Switch by a single press',
+      blockTitle: 'Block the key in other apps',
       talk: 'talk', tray: 'tray', showWin: 'show window', exit: 'Exit',
       change: 'Change', capture: 'Press a key…',
       devicePrefix: 'Microphone: ',
@@ -67,7 +67,7 @@
   }
 
   const state = {
-    key: 'HOME', ptt: true, block: true, autostart: false,
+    key: 'HOME', ptt: true, block: true, toggle: false, autostart: false,
     lang: 0, micState: 'muted', capturing: false, device: ''
   };
   let statusTimer = null;
@@ -97,19 +97,19 @@
     if (state.micState === 'unavailable') { title = tr.stateBad; hint = tr.hintBad; }
     else if (!state.ptt) { title = tr.stateOff; hint = tr.hintOff; }
     else if (state.micState === 'live') { title = tr.stateLive; hint = tr.hintLive; }
-    else { title = tr.stateMuted; hint = tr.hintMuted.replace('{key}', state.key); }
+    else {
+      title = tr.stateMuted;
+      hint = (state.toggle ? tr.hintToggle : tr.hintMuted).replace('{key}', state.key);
+    }
     $('#state-text').textContent = title;
     $('#state-hint').textContent = hint;
     $('#state-device').textContent = state.device ? tr.devicePrefix + state.device : '';
 
     setText('#subtitle', tr.subtitle);
-    setText('#settings-title', tr.settings);
     setText('#key-row-title', tr.keyTitle);
-    setText('#key-row-hint', tr.keyHint);
     setText('#ptt-row-title', tr.pttTitle);
-    setText('#ptt-row-hint', tr.pttHint);
+    setText('#toggle-row-title', tr.toggleTitle);
     setText('#block-row-title', tr.blockTitle);
-    setText('#block-row-hint', tr.blockHint);
     setText('#hk-key-label', tr.talk);
     setText('#hk-tray-label', tr.showWin);
     setText('#exit-label', tr.exit);
@@ -122,6 +122,8 @@
 
     $('#sw-ptt').classList.toggle('on', !!state.ptt);
     $('#sw-ptt').setAttribute('aria-checked', state.ptt ? 'true' : 'false');
+    $('#sw-toggle').classList.toggle('on', !!state.toggle);
+    $('#sw-toggle').setAttribute('aria-checked', state.toggle ? 'true' : 'false');
     $('#sw-block').classList.toggle('on', !!state.block);
     $('#sw-block').setAttribute('aria-checked', state.block ? 'true' : 'false');
     $('#btn-autostart').classList.toggle('off', !state.autostart);
@@ -136,6 +138,7 @@
   /* ------------------------- действия ------------------------- */
   $('#btn-key').addEventListener('click', () => send({ cmd: state.capturing ? 'captureCancel' : 'capture' }));
   $('#sw-ptt').addEventListener('click', () => send({ cmd: 'setPtt', value: !state.ptt }));
+  $('#sw-toggle').addEventListener('click', () => send({ cmd: 'setToggle', value: !state.toggle }));
   $('#sw-block').addEventListener('click', () => send({ cmd: 'setBlock', value: !state.block }));
   $('#btn-autostart').addEventListener('click', () => send({ cmd: 'autostart' }));
   $('#btn-lang').addEventListener('click', () => send({ cmd: 'setLang', value: state.lang ? 0 : 1 }));
@@ -163,6 +166,7 @@
   /* ------------------------- предпросмотр ------------------------- */
   function mockHandle(obj) {
     if (obj.cmd === 'setPtt') { state.ptt = obj.value; state.micState = state.ptt ? 'muted' : 'off'; render(); return; }
+    if (obj.cmd === 'setToggle') { state.toggle = obj.value; state.micState = 'muted'; render(); return; }
     if (obj.cmd === 'setBlock') { state.block = obj.value; render(); return; }
     if (obj.cmd === 'autostart') { state.autostart = !state.autostart; render(); return; }
     if (obj.cmd === 'setLang') { state.lang = obj.value; render(); return; }

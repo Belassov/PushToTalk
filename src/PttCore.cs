@@ -10,6 +10,7 @@ internal sealed class Cfg
 {
     public int Key = 0x24;          // VK_HOME
     public bool Ptt = true;
+    public bool Toggle = false;     // false — удерживать клавишу, true — переключение нажатием
     public bool Block = true;
     public int Lang;                // 0 = RU, 1 = EN
 
@@ -33,6 +34,7 @@ internal sealed class Cfg
                             if (int.TryParse(v, out int key) && key is >= 1 and <= 0xFF) c.Key = key;
                             break;
                         case "ptt": if (v is "0" or "1") c.Ptt = v == "1"; break;
+                        case "toggle": if (v is "0" or "1") c.Toggle = v == "1"; break;
                         case "block": if (v is "0" or "1") c.Block = v == "1"; break;
                         case "lang": if (v is "0" or "1") c.Lang = int.Parse(v); break;
                     }
@@ -40,7 +42,7 @@ internal sealed class Cfg
             }
         }
         catch (Exception ex) { Program.Log("конфиг: ошибка чтения — " + ex.Message); }
-        Program.Log($"конфиг: key={VkName(c.Key)} ptt={c.Ptt} block={c.Block} lang={c.Lang}");
+        Program.Log($"конфиг: key={VkName(c.Key)} ptt={c.Ptt} toggle={c.Toggle} block={c.Block} lang={c.Lang}");
         return c;
     }
 
@@ -53,6 +55,7 @@ internal sealed class Cfg
                 "[main]",
                 "key=" + Key,
                 "ptt=" + (Ptt ? 1 : 0),
+                "toggle=" + (Toggle ? 1 : 0),
                 "block=" + (Block ? 1 : 0),
                 "lang=" + Lang
             };
@@ -78,6 +81,10 @@ internal sealed class Cfg
         (0xDB, "["), (0xDC, "\\"), (0xDD, "]"), (0xDE, "'"),
         (0x6B, "NUM +"), (0x6D, "NUM -"), (0x6A, "NUM *"), (0x6F, "NUM /"), (0x6E, "NUM .")
     };
+
+    /// <summary>Ctrl/Alt/Shift/Win: назначить такую клавишу рацией — сломать управление машиной.</summary>
+    public static bool IsModifier(int vk) => vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C
+        or (>= 0xA0 and <= 0xA5);
 
     public static string VkName(int vk)
     {
@@ -120,7 +127,8 @@ internal static class Mic
     public static bool? Get()
     {
         Open();
-        foreach (var d in new[] { _comm, _def })
+        // состояние того устройства, которое слышит большинству программ (по умолчанию)
+        foreach (var d in new[] { _def, _comm })
         {
             if (d == null) continue;
             try { return d.AudioEndpointVolume.Mute; }
@@ -197,6 +205,7 @@ internal sealed class PttHook : IDisposable
     public bool Enabled = true, Block = true, Capturing;
     public Action<bool>? OnKey;               // true — нажали, false — отпустили
     public Action<int>? OnCaptured;           // новая клавиша, -1 — отмена
+    public Func<bool>? OnEsc;                 // Esc: true — клавиша «съедена» (окно ушло в трей)
 
     public PttHook()
     {
@@ -217,6 +226,11 @@ internal sealed class PttHook : IDisposable
             {
                 if (down)
                 {
+                    if (Cfg.IsModifier(vk))
+                    {
+                        Program.Log("захват: модификатор назначить нельзя");
+                        return 1;
+                    }
                     Capturing = false;
                     OnCaptured?.Invoke(vk == VK_ESCAPE ? -1 : vk);
                 }
@@ -227,6 +241,10 @@ internal sealed class PttHook : IDisposable
                 if (down && !_down) { _down = true; OnKey?.Invoke(true); }
                 else if (!down && _down) { _down = false; OnKey?.Invoke(false); }
                 if (Block) return 1;                        // клавиша не уходит другим программам
+            }
+            else if (vk == VK_ESCAPE)
+            {
+                if (OnEsc?.Invoke() == true) return 1;      // окно свёрнуто в трей — Esc не дальше
             }
         }
         catch (Exception ex) { Program.Log("хук: ошибка — " + ex.Message); }

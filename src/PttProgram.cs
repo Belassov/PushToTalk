@@ -32,13 +32,25 @@ internal static class Program
         catch { /* логи не должны ронять приложение */ }
     }
 
+    /// <summary>Сохраняет лог прошлого запуска (log.prev.txt), не давая ему расти бесконечно.</summary>
+    private static void KeepPrevLog()
+    {
+        try
+        {
+            if (!File.Exists(LogPath)) return;
+            if (new FileInfo(LogPath).Length > 1024 * 1024) { File.Delete(LogPath); return; }
+            File.Copy(LogPath, Path.Combine(DataDir, "log.prev.txt"), true);
+        }
+        catch { /* логи не должны ронять приложение */ }
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string? cls, string title);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         using var mutex = new Mutex(true, @"Local\PushToTalkWebSingle", out bool first);
         if (!first)
@@ -53,10 +65,11 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
         Directory.CreateDirectory(DataDir);
-        File.WriteAllText(LogPath, "", new UTF8Encoding(false));
+        KeepPrevLog();                     // прошлый запуск не стираем — иначе «иногда не работает» не воспроизвести
         Log($"--- запуск, каталог данных {DataDir}");
 
-        try { Application.Run(new Host()); }
+        // --tray: запуск вместе с Windows — окно не показываем, только трей
+        try { Application.Run(new Host(args.Contains("--tray"))); }
         catch (Exception ex) { Log("КРИТИЧЕСКАЯ ОШИБКА: " + ex); throw; }
     }
 }
@@ -71,6 +84,9 @@ internal sealed class Host : ApplicationContext
     private bool _exiting, _balloonShown;
     private int _micMuted = -1;              // -1 неизвестно, 0 активен, 1 заглушён
     private bool _keyDown;
+    private bool _toggled;                 // в режиме переключения: микрофон включён нажатием
+    private bool? _micMuteAtStart;           // состояние микрофона до запуска — вернём при выходе
+    private System.Windows.Forms.Timer? _captureTimer;
 
     private readonly Cfg _cfg = Cfg.Load();
     private PttHook? _hook;
@@ -84,6 +100,11 @@ internal sealed class Host : ApplicationContext
     [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr hrgn, bool redraw);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
 
     private const int WM_NCLBUTTONDOWN = 0x00A1, HTCAPTION = 2;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2;
@@ -109,6 +130,8 @@ internal sealed class Host : ApplicationContext
             "stCancelled" => ru ? "Смена клавиши отменена" : "Key change cancelled",
             "stPttOn" => ru ? "Push-to-talk включён" : "Push-to-talk enabled",
             "stPttOff" => ru ? "Push-to-talk выключен: микрофон всегда активен" : "Push-to-talk disabled: microphone always live",
+            "stToggleOn" => ru ? "Микрофон переключается одним нажатием" : "The microphone switches on a single press",
+            "stToggleOff" => ru ? "Микрофон по удерживанию клавиши" : "Hold the key to talk",
             "stBlockOn" => ru ? "Клавиша блокируется в других программах" : "The key is blocked in other apps",
             "stBlockOff" => ru ? "Клавиша больше не блокируется" : "The key is no longer blocked",
             "stAutoOn" => ru ? "Автозапуск включён" : "Start with Windows enabled",
@@ -118,8 +141,11 @@ internal sealed class Host : ApplicationContext
         };
     }
 
-    internal Host()
+    private readonly bool _startHidden;   // запуск с Windows: окно не показываем, живём в трее
+
+    internal Host(bool startHidden = false)
     {
+        _startHidden = startHidden;
         var work = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
         // окно компактное, 16 к 9: программа в основном работает в трее
         _scale = Math.Clamp(work.Height / 1200.0, 0.9, 1.6);
@@ -131,10 +157,10 @@ internal sealed class Host : ApplicationContext
         _form.Text = Program.AppTitle;
         _form.ShowInTaskbar = true;
         _form.MaximizeBox = false;
-        _form.MinimumSize = new Size((int)(480 * _scale), (int)(270 * _scale));
         _form.ClientSize = new Size(w, h);
         _form.Location = new Point(work.Left + (work.Width - w) / 2, work.Top + Math.Max(8, (work.Height - h) / 2));
         _form.FormClosing += OnClosing;
+        _form.Deactivate += (_, _) => CancelCapture("клик вне окна");
         _form.Shown += async (_, _) => await InitWebAsync();
         Program.Log($"окно {w}x{h}, масштаб {_scale:0.00}");
 
@@ -144,13 +170,33 @@ internal sealed class Host : ApplicationContext
         _poll = new System.Windows.Forms.Timer { Interval = 100 };
         _poll.Tick += (_, _) =>
         {
-            if (++_ticks % 10 == 0) PollMic();          // раз в секунду — состояние микрофона
+            if (++_ticks % 10 == 0)
+            {
+                PollMic();                              // раз в секунду — состояние микрофона
+                // клавишу могли отпустить на защищённом экране (UAC) — хук этого не видит
+                // (в режиме переключения отпускание клавиши ничего не значит)
+                if (!_cfg.Toggle && _keyDown && (GetAsyncKeyState(_cfg.Key) & 0x8000) == 0)
+                {
+                    Program.Log("хук: клавиша отпущена вне обычного потока — возвращаю микрофон");
+                    _keyDown = false;
+                    ApplyMic();
+                }
+            }
             if (_form.Visible) SendLevel();             // 10 раз в секунду — уровень сигнала
         };
         _poll.Start();
 
+        _micMuteAtStart = Mic.Get();       // запоминаем, чтобы вернуть микрофон при выходе
         ApplyMic();                       // при запуске микрофон заглушён, пока не зажата клавиша
-        _form.Show();
+        if (_startHidden)
+        {
+            // Запуск с Windows: окно не появляется — но интерфейс сразу готов,
+            // чтобы при открытии настроек из трея всё было на месте.
+            _ = InitWebAsync();
+            Program.Log("запуск скрытый (вместе с Windows) — окно только по вызову");
+        }
+        else _form.Show();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => RestoreMicOnExit();
     }
 
     /* ------------------------------ трей ------------------------------ */
@@ -197,9 +243,33 @@ internal sealed class Host : ApplicationContext
     {
         _form.Show();
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
-        _form.BringToFront();
-        _form.Activate();
+        ForceForeground(_form);
         Program.Log("окно показано");
+    }
+
+    /// <summary>Выводит окно на передний план, даже когда фокус у чужой программы:
+    /// Windows сама фокус не отдаёт, поэтому на время вызова цепляемся к её потоку ввода.</summary>
+    private static void ForceForeground(Form f)
+    {
+        IntPtr h = f.Handle;
+        if (h == IntPtr.Zero) return;
+        IntPtr fore = GetForegroundWindow();
+        uint foreThread = GetWindowThreadProcessId(fore, out _);
+        uint thisThread = GetCurrentThreadId();
+        if (fore != h && foreThread != 0 && foreThread != thisThread)
+        {
+            AttachThreadInput(foreThread, thisThread, true);
+            BringWindowToTop(h);
+            SetForegroundWindow(h);
+            f.Activate();
+            AttachThreadInput(foreThread, thisThread, false);
+        }
+        else
+        {
+            BringWindowToTop(h);
+            SetForegroundWindow(h);
+            f.Activate();
+        }
     }
 
     private void HideWindowUi()
@@ -222,9 +292,23 @@ internal sealed class Host : ApplicationContext
         _poll?.Stop();
         _hook?.Dispose();
         if (_tray != null) _tray.Visible = false;
+        RestoreMicOnExit();
         _web?.Dispose();
         _form.Close();
         ExitThread();
+    }
+
+    /// <summary>Возвращает микрофон в то состояние, в котором он был до запуска программы,
+    /// иначе после выхода он остаётся заглушённым — и непонятно почему.</summary>
+    private void RestoreMicOnExit()
+    {
+        if (!_micMuteAtStart.HasValue) return;
+        try
+        {
+            Mic.Set(_micMuteAtStart.Value);
+            Program.Log($"микрофон возвращён: {(_micMuteAtStart.Value ? "заглушён" : "активен")}");
+        }
+        catch (Exception ex) { Program.Log("возврат микрофона не удался — " + ex.Message); }
     }
 
     private void OnClosing(object? sender, FormClosingEventArgs e)
@@ -237,6 +321,17 @@ internal sealed class Host : ApplicationContext
         }
     }
 
+    /// <summary>Отменяет ожидание новой клавиши (по таймауту, по клику вне окна или по кнопке «Отмена»).</summary>
+    private void CancelCapture(string why)
+    {
+        _captureTimer?.Stop();
+        if (_hook == null || !_hook.Capturing) return;
+        _hook.Capturing = false;
+        SendState();
+        SetStatus(T(_cfg.Lang, "stCancelled"), "warn");
+        Program.Log("захват клавиши отменён: " + why);
+    }
+
     /* --------------------------- хук и микрофон --------------------------- */
     private void SetupHook()
     {
@@ -247,12 +342,29 @@ internal sealed class Host : ApplicationContext
             Block = _cfg.Block,
             OnKey = (down) => Post(() =>
             {
+                // режим переключения: одно нажатие включает микрофон, следующее — выключает
+                // (хук и так срабатывает один раз на нажатие, автоповтор не долбит)
+                if (down && _cfg.Toggle) _toggled = !_toggled;
                 _keyDown = down;
-                Program.Log(down ? "ptt: клавиша нажата -> микрофон активен" : "ptt: клавиша отпущена -> заглушён");
+                if (_cfg.Toggle)
+                    Program.Log(down ? $"ptt: нажатие -> микрофон {(_toggled ? "активен" : "заглушён")}"
+                                     : "ptt: клавиша отпущена (режим переключения — без изменений)");
+                else
+                    Program.Log(down ? "ptt: клавиша нажата -> микрофон активен" : "ptt: клавиша отпущена -> заглушён");
                 ApplyMic();
             }),
+            OnEsc = () =>
+            {
+                // Esc — окно в трей, но только когда окно наших программ в фокусе
+                var h = GetForegroundWindow();
+                GetWindowThreadProcessId(h, out uint pid);
+                if (pid != (uint)Environment.ProcessId) return false;
+                Post(HideWindowUi);
+                return true;
+            },
             OnCaptured = (vk) => Post(() =>
             {
+                _captureTimer?.Stop();
                 if (vk < 0)
                 {
                     SetStatus(T(_cfg.Lang, "stCancelled"), "warn");
@@ -279,7 +391,8 @@ internal sealed class Host : ApplicationContext
     /// <summary>Целевое состояние: заглушён, пока не зажата клавиша (или PTT выключен — всегда активен).</summary>
     private void ApplyMic()
     {
-        bool want = _cfg.Ptt && !_keyDown;
+        // в режиме переключения микрофон держит состояние до следующего нажатия
+        bool want = _cfg.Ptt && (_cfg.Toggle ? _toggled : !_keyDown);
         var cur = Mic.Get();
         if (cur == null) { _micMuted = -1; SendState(); RefreshTray(); return; }
         if (cur == want) { _micMuted = cur.Value ? 1 : 0; SendState(); RefreshTray(); return; }
@@ -316,8 +429,12 @@ internal sealed class Host : ApplicationContext
         Program.Log($"интерфейс распакован: {n} файлов");
     }
 
+    private bool _webStarted;
+
     private async Task InitWebAsync()
     {
+        if (_webStarted) return;              // второй раз (например, из Shown) не нужен
+        _webStarted = true;
         try
         {
             ExtractUi();
@@ -372,6 +489,7 @@ internal sealed class Host : ApplicationContext
             ["key"] = Cfg.VkName(_cfg.Key),
             ["keyVk"] = _cfg.Key,
             ["ptt"] = _cfg.Ptt,
+            ["toggle"] = _cfg.Toggle,
             ["block"] = _cfg.Block,
             ["autostart"] = AutostartOn(),
             ["lang"] = _cfg.Lang,
@@ -397,7 +515,7 @@ internal sealed class Host : ApplicationContext
         JsonNode? node;
         try { node = JsonNode.Parse(raw); } catch { Program.Log("мост: не разобрал " + raw); return; }
         string cmd = node?["cmd"]?.GetValue<string>() ?? "";
-        Program.Log("мост: " + raw);
+        Program.Log($"мост: {cmd} ({raw.Length} байт)");   // сам текст в лог не пишем
 
         switch (cmd)
         {
@@ -406,14 +524,7 @@ internal sealed class Host : ApplicationContext
                 SendState();
                 break;
             case "win":
-                switch (node?["act"]?.GetValue<string>())
-                {
-                    case "min" or "close": HideWindowUi(); return;
-                    case "max":
-                        _form.WindowState = _form.WindowState == FormWindowState.Maximized
-                            ? FormWindowState.Normal : FormWindowState.Maximized;
-                        return;
-                }
+                if (node?["act"]?.GetValue<string>() is "min" or "close") { HideWindowUi(); return; }
                 break;
             case "drag":
                 ReleaseCapture();
@@ -427,13 +538,24 @@ internal sealed class Host : ApplicationContext
                     SendState();
                     SetStatus(T(_cfg.Lang, "stCapture"), "warn");
                     Program.Log("захват клавиши: жду нажатия");
+                    // страховка: если пользователь кликнул мимо, хук не должен вечно съедать весь ввод
+                    _captureTimer?.Stop();
+                    _captureTimer = new System.Windows.Forms.Timer { Interval = 8000 };
+                    _captureTimer.Tick += (_, _) => CancelCapture("таймаут");
+                    _captureTimer.Start();
                 }
                 break;
-            case "captureCancel":
-                if (_hook != null) { _hook.Capturing = false; SendState(); }
-                break;
+            case "captureCancel": CancelCapture("пользователь"); break;
             case "setPtt":
                 SetPtt(node?["value"]?.GetValue<bool>() ?? !_cfg.Ptt);
+                break;
+            case "setToggle":
+                _cfg.Toggle = node?["value"]?.GetValue<bool>() ?? !_cfg.Toggle;
+                _cfg.Save();
+                _toggled = false;                 // каждый раз начинаем с заглушённого микрофона
+                SetStatus(T(_cfg.Lang, _cfg.Toggle ? "stToggleOn" : "stToggleOff"));
+                ApplyMic();
+                SendState();
                 break;
             case "setBlock":
                 _cfg.Block = node?["value"]?.GetValue<bool>() ?? !_cfg.Block;
@@ -466,6 +588,7 @@ internal sealed class Host : ApplicationContext
         _cfg.Save();
         if (_hook != null) _hook.Enabled = on;
         if (!on) _keyDown = false;
+        if (on) _toggled = false;             // включаем PTT — микрофон снова заглушён
         Program.Log("PTT " + (on ? "включён" : "выключен"));
         SetStatus(T(_cfg.Lang, on ? "stPttOn" : "stPttOff"));
         ApplyMic();
@@ -484,10 +607,30 @@ internal sealed class Host : ApplicationContext
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "PushToTalk";
 
+    /// <summary>Путь к exe из записи автозапуска (в значении реестра: "путь" --tray).</summary>
+    private static string ExeFromRunValue(string stored)
+    {
+        string s = stored.Trim();
+        int args = s.IndexOf(" --", StringComparison.Ordinal);
+        if (args > 0) s = s[..args];
+        return s.Trim().Trim('"');
+    }
+
     private static bool AutostartOn()
     {
         using var k = Registry.CurrentUser.OpenSubKey(RunKey);
-        return k?.GetValue(RunValue) != null;
+        string? stored = k?.GetValue(RunValue) as string;
+        if (stored == null) return false;
+        // exe могли перетащить в другую папку — в реестре остался старый путь, и автозапуск молча не работает;
+        // старая запись без «--tray» показывала бы окно при входе в Windows — тоже перезаписываем
+        string cur = Environment.ProcessPath ?? "";
+        if (!string.Equals(ExeFromRunValue(stored), cur, StringComparison.OrdinalIgnoreCase)
+            || !stored.Contains("--tray"))
+        {
+            Program.Log($"автозапуск: запись устарела ({stored}) — перезаписываю на «{cur} --tray»");
+            SetAutostart(true);
+        }
+        return true;
     }
 
     private static void SetAutostart(bool on)
@@ -497,8 +640,9 @@ internal sealed class Host : ApplicationContext
         if (on)
         {
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
-            k.SetValue(RunValue, "\"" + exe + "\"");
-            Program.Log("автозапуск включён: " + exe);
+            // --tray — при входе в Windows окно не показываем (см. Main)
+            k.SetValue(RunValue, "\"" + exe + "\" --tray");
+            Program.Log("автозапуск включён: " + exe + " --tray");
         }
         else
         {

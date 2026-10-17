@@ -7,7 +7,7 @@
   --surface0:#313244; --surface1:#45475a; --surface2:#585b70;
   --overlay0:#6c7086; --overlay1:#7f849c;
   --text:#cdd6f4; --subtext0:#a6adc8; --subtext1:#bac2de;
-  --lavender:#b4befe; --blue:#89b4fa; --sapphire:#74c7ec; --teal:#94e2d5;
+  --lavender:#b4befe; --blue:#89b4fa; --sapphire:#74c7ec; --sky:#89dceb; --teal:#94e2d5;
   --green:#a6e3a1; --peach:#fab387; --mauve:#cba6f7; --red:#f38ba8; --yellow:#f9e2af;
 
   --r-window:14px; --r-card:12px; --r-pill:999px;
@@ -309,7 +309,6 @@ kbd{
 .row:first-child{border-top:0}
 .row-main{flex:1 1 auto;min-width:0}
 .row-title{font-size:13px;font-weight:500;color:var(--text)}
-.row-hint{font-size:11.5px;color:var(--overlay0);margin-top:2px;line-height:1.35}
 .row-side{display:flex;align-items:center;gap:8px;flex:0 0 auto}
 .pill-lavender{background:rgba(180,190,254,.10);color:var(--lavender);border-color:rgba(180,190,254,.45)}
 .pill-lavender:hover:not([disabled]){background:rgba(180,190,254,.18);border-color:var(--lavender)}
@@ -328,15 +327,6 @@ kbd{
 .switch.on{background:rgba(166,227,161,.18);border-color:rgba(166,227,161,.55)}
 .switch.on::after{transform:translateX(20px);background:var(--green)}
 .switch:hover{border-color:var(--overlay0)}
-
-/* Пояснительная строка */
-.note{
-  flex:0 0 auto;display:flex;align-items:flex-start;gap:9px;
-  padding:10px 13px;border-radius:var(--r-card);
-  background:var(--mantle);border:1px solid var(--surface0);
-  font-size:11.5px;line-height:1.45;color:var(--overlay1);
-}
-.note svg{flex:0 0 auto;margin-top:1px}
 
 /* Индикатор уровня сигнала микрофона */
 .level{
